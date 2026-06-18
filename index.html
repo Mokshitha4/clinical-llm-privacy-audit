@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Don't Call It Privacy Until You Pick a Metric</title>
+<meta name="description" content="Joint auditing of fine-tuning regimes and privacy-leakage metrics in clinical LLMs. Three attack families, four fine-tuning regimes, six backbones — and no single verdict on what 'private' means.">
+<meta property="og:title" content="Don't Call It Privacy Until You Pick a Metric">
+<meta property="og:description" content="Joint auditing of fine-tuning and privacy metrics in clinical LLMs — NeurIPS 2026.">
+<meta property="og:type" content="website">
+
+<!--
+  ====================================================================
+  EDIT ME — fill in before publishing:
+  1. AUTHOR NAMES / AFFILIATIONS  — search "EDIT: authors"
+  2. PAPER PDF LINK               — search "EDIT: paper-link"
+  3. ARXIV LINK                   — search "EDIT: arxiv-link"
+  4. CODE / GITHUB LINK           — search "EDIT: code-link"
+  5. BIBTEX BLOCK                 — search "EDIT: bibtex"
+  6. FIGURE IMAGES                — replace figures/figN.png paths with real files
+  ====================================================================
+-->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --bg:        #ffffff;
+    --bg-alt:    #f8fafc;
+    --border:    #e2e8f0;
+    --text:      #0f172a;
+    --muted:     #64748b;
+    --accent:    #2563eb;
+    --accent-bg: #eff6ff;
+    --code-bg:   #1e293b;
+    --code-text: #e2e8f0;
+    --max:       1080px;
+    --r:         4px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    font-size: 17px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  a { color: var(--accent); text-decoration-thickness: 1px; }
+  a:hover { text-decoration: underline; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  h1, h2, h3 { font-family: 'Source Serif 4', serif; font-weight: 600; margin: 0; color: var(--text); }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: .1em;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 28px; }
+
+  /* nav */
+  .nav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(255,255,255,0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav .wrap { display: flex; align-items: center; justify-content: space-between; padding: 14px 28px; gap: 16px; }
+  .nav-title { font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .nav-links { display: flex; gap: 22px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; }
+  .nav-links a { color: var(--muted); text-decoration: none; }
+  .nav-links a:hover { color: var(--accent); }
+  @media (max-width: 680px) { .nav-links { display: none; } }
+
+  /* hero */
+  .hero { padding: 72px 0 64px; border-bottom: 1px solid var(--border); }
+  .hero .eyebrow {
+    display: inline-block; color: var(--accent); background: var(--accent-bg);
+    border: 1px solid #bfdbfe; padding: 4px 10px; border-radius: var(--r);
+    margin-bottom: 22px;
+  }
+  .hero h1 { font-size: clamp(28px, 4vw, 46px); line-height: 1.14; max-width: 840px; }
+  .hero .dek { color: var(--muted); max-width: 680px; margin-top: 18px; font-size: 17.5px; }
+  .authors { margin-top: 22px; font-size: 15px; color: var(--muted); }
+  .authors .note { display: block; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; color: #94a3b8; margin-top: 6px; }
+  .venue-row { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px; }
+  .pill {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; font-weight: 500;
+    border: 1.5px solid var(--border); color: var(--text);
+    padding: 8px 16px; border-radius: 999px; text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
+    transition: border-color .15s, background .15s;
+  }
+  .pill:hover { border-color: var(--text); background: var(--bg-alt); text-decoration: none; }
+  .pill.solid { background: var(--text); border-color: var(--text); color: #fff; }
+  .pill.solid:hover { background: #1e293b; border-color: #1e293b; }
+  .pill.dim { opacity: .4; pointer-events: none; }
+
+  /* sections */
+  section { padding: 60px 0; }
+  section + section { border-top: 1px solid var(--border); }
+  section h2 { font-size: clamp(22px, 2.6vw, 30px); }
+  .section-head { margin-bottom: 32px; }
+  .section-head .eyebrow { color: var(--accent); display: inline-block; background: none; border: none; padding: 0; margin-bottom: 10px; border-radius: 0; }
+
+  .abstract-card {
+    border-left: 3px solid var(--accent); background: var(--bg-alt);
+    padding: 26px 30px; font-size: 16.5px; border-radius: 0 var(--r) var(--r) 0; line-height: 1.72;
+  }
+
+  /* vitals */
+  .vitals { display: grid; grid-template-columns: repeat(5,1fr); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+  @media (max-width: 820px) { .vitals { grid-template-columns: repeat(2,1fr); } }
+  .vital { padding: 20px 18px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); background: var(--bg); }
+  .vital:last-child { border-right: none; }
+  .vital .num { font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 600; color: var(--text); }
+  .vital .lab { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+
+  /* attack family cards */
+  .families { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 8px; }
+  @media (max-width: 760px) { .families { grid-template-columns: 1fr; } }
+  .fam { border: 1px solid var(--border); border-radius: var(--r); padding: 22px; background: var(--bg); }
+  .fam .tag { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .fam h3 { font-size: 18px; margin-top: 10px; }
+  .fam p { font-size: 14.5px; color: var(--muted); margin: 10px 0 0; }
+  .fam ul { font-size: 14px; color: var(--muted); margin: 10px 0 0; padding-left: 18px; }
+  .fam li { margin-bottom: 4px; }
+
+  /* fine-tuning grid */
+  .ft-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  @media (max-width: 640px) { .ft-grid { grid-template-columns: 1fr; } }
+  .ft-card { background: var(--bg-alt); border: 1px solid var(--border); border-radius: var(--r); padding: 18px; }
+  .ft-card .ft-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text); font-weight: 600; }
+  .ft-card p { font-size: 14px; color: var(--muted); margin: 8px 0 0; }
+
+  /* findings */
+  .finding { display: grid; grid-template-columns: 52px 1fr; gap: 24px; padding: 28px 0; border-top: 1px solid var(--border); }
+  .finding:first-of-type { border-top: none; padding-top: 0; }
+  .finding .fnum { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; color: var(--accent); padding-top: 4px; letter-spacing: .04em; }
+  .finding h3 { font-size: 19px; margin-bottom: 10px; }
+  .finding p { color: var(--muted); margin: 0 0 10px; font-size: 15.5px; }
+  .finding p:last-child { margin-bottom: 0; }
+  .stat { display: inline-block; font-family: 'IBM Plex Mono', monospace; background: var(--bg-alt); border: 1px solid var(--border); padding: 1px 7px; border-radius: 3px; font-size: 13.5px; white-space: nowrap; color: var(--text); }
+  .stat.neg { background: #fef2f2; border-color: #fecaca; color: #b91c1c; }
+  .stat.pos { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+
+  /* TOPSIS table */
+  .topsis-table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin-top: 16px; }
+  .topsis-table th { font-family: 'IBM Plex Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; text-align: left; padding: 7px 12px; border-bottom: 2px solid var(--border); }
+  .topsis-table td { padding: 7px 12px; border-bottom: 1px solid var(--bg-alt); }
+  .topsis-table tr:last-child td { border-bottom: none; }
+  .topsis-table tr:hover td { background: var(--bg-alt); }
+  .topsis-table .best { font-weight: 700; }
+  .topsis-table .em-col { color: #0369a1; }
+  .topsis-table .pa-col { color: #92400e; }
+  .topsis-table .mia-col { color: #6d28d9; }
+
+  /* figures */
+  .figures-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 12px; }
+  @media (max-width: 740px) { .figures-grid { grid-template-columns: 1fr; } }
+  figure { margin: 0; }
+  .fig-img {
+    width: 100%; display: block; border: 1px solid var(--border); border-radius: var(--r);
+    opacity: 0; transform: translateY(14px); transition: opacity .55s ease, transform .55s ease;
+  }
+  .fig-img.in { opacity: 1; transform: none; }
+  .fig-placeholder {
+    width: 100%; min-height: 240px; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 8px;
+    border: 2px dashed var(--border); background: var(--bg-alt); border-radius: var(--r);
+    color: var(--muted); font-size: 13px; font-family: 'IBM Plex Mono', monospace; padding: 24px;
+  }
+  .fig-placeholder .ph-title { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: #cbd5e1; }
+  figcaption { font-size: 14px; color: var(--muted); margin-top: 12px; max-width: 760px; line-height: 1.55; }
+  figcaption b { color: var(--text); }
+  figcaption .fig-num { font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; text-transform: uppercase; letter-spacing: .05em; }
+
+  /* quote block */
+  .quote-block {
+    border-left: 3px solid var(--text); background: var(--bg-alt);
+    padding: 22px 26px; font-size: 16.5px;
+    border-radius: 0 var(--r) var(--r) 0; margin: 28px 0;
+  }
+  .quote-block strong { display: block; margin-bottom: 8px; font-size: 17px; }
+
+  /* bibtex */
+  .bibtex { position: relative; background: var(--code-bg); color: var(--code-text); border-radius: var(--r); overflow: hidden; }
+  .bibtex pre { margin: 0; padding: 26px 28px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 1.65; overflow-x: auto; }
+  .copy-btn {
+    position: absolute; top: 14px; right: 14px; font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+    background: rgba(255,255,255,0.07); color: var(--code-text); border: 1px solid rgba(255,255,255,0.18);
+    padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: background .12s;
+  }
+  .copy-btn:hover { background: rgba(255,255,255,0.15); }
+
+  /* footer */
+  footer { border-top: 1px solid var(--border); padding: 36px 0 48px; background: var(--bg-alt); }
+  footer .wrap { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; flex-wrap: wrap; }
+  footer .links { display: flex; gap: 18px; font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+  footer .links a { color: var(--muted); }
+  footer .fine { font-size: 12.5px; color: var(--muted); max-width: 520px; }
+
+  /* animations */
+  .reveal { opacity: 0; transform: translateY(10px); transition: opacity .5s ease, transform .5s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════ NAV ══════════════════════ -->
+<nav class="nav">
+  <div class="wrap">
+    <div class="nav-title">DON'T CALL IT PRIVACY UNTIL YOU PICK A METRIC</div>
+    <div class="nav-links">
+      <a href="#abstract">Abstract</a>
+      <a href="#attacks">Attacks</a>
+      <a href="#findings">Findings</a>
+      <a href="#figures">Figures</a>
+      <a href="#bibtex">Cite</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ══════════════════════ HERO ══════════════════════ -->
+<header class="hero">
+  <div class="wrap">
+    <span class="eyebrow">NeurIPS 2026 &middot; Privacy &amp; Security &middot; Clinical LLMs</span>
+    <h1>Don't Call It Privacy Until You Pick a Metric</h1>
+    <p class="dek">Joint auditing of fine-tuning regimes and privacy-leakage metrics in clinical LLMs, across six open-weight backbones, four clinical tasks, and three families of privacy attack.</p>
+
+    <!-- EDIT: authors -->
+    <div class="authors">
+      Anonymous Author(s)
+      <span class="note">Author names will appear here after the review period. NeurIPS 2026 policy permits a non-anonymous preprint/website during review.</span>
+    </div>
+
+    <div class="venue-row">
+      <!-- EDIT: paper-link -->
+      <!-- <a class="pill solid" href="paper.pdf" target="_blank">&#128196; Paper PDF</a> -->
+      <!-- EDIT: arxiv-link -->
+      <a class="pill dim" href="#" aria-disabled="true">arXiv (coming soon)</a>
+      <!-- EDIT: code-link -->
+      <a class="pill" href="https://anonymous.4open.science/r/llm-privacy-audit-2029/" target="_blank">&#10092;/&#10093; Code</a>
+      <a class="pill" href="#bibtex">Cite</a>
+    </div>
+
+  </div>
+</header>
+
+<main>
+
+<!-- ══════════════════════ ABSTRACT ══════════════════════ -->
+<section id="abstract">
+  <div class="wrap">
+    <div class="section-head">
+      <span class="eyebrow">Abstract</span>
+      <h2>Three attacks, four fine-tuning regimes, no single verdict</h2>
+    </div>
+    <div class="abstract-card reveal">
+      <!-- Fine-tuning open-weight LLMs on clinical data is necessary to make them fit for purpose &mdash; but it can also leave them exposed to privacy intrusions. The trouble is that &ldquo;privacy&rdquo; itself has no single agreed-upon measurement: the literature has separately invoked verbatim extraction, prompt-based identity probing, and membership inference to justify when a clinical LLM is &ldquo;safe.&rdquo; We argue these are not separable questions. Across six open-weight backbones, four clinical tasks, and four fine-tuning regimes (full-parameter and QLoRA, each with full- and masked-input loss), we run all three attack families and every task-specific utility metric on every resulting cell &mdash; plus a differentially-private fine-tuning case study (DP-SGD, &epsilon; &isin; {1, 2, 10}). Two findings recur: <em>privacy metrics disagree with each other</em>, sometimes sharply, and <em>the fine-tuning regime interacts with the choice of metric in a nontrivial way</em> &mdash; a regime that looks safest under one attack can look the leakiest under another. Reporting a single privacy number for a clinical LLM is, as a result, unreliable for its stated purpose. -->
+    Fine-tuning open-weight large language models (LLMs) on domain-specific data is critical to ensuring that they are fit-for-purpose, particularly in safety critical domains like healthcare. At the same time, if care is not taken, fine-tuning can leave LLMs vulnerable to a variety of privacy intrusions. However, there are many ways to define "useful" and "privacy" in practice.  This begs the question, among full-parameter and parameter-efficient (QLoRA) fine-tuning, which choice yields the best utility for a given privacy risk? Answering this question is complicated by the fact that privacy itself has no single agreed-upon measurement, and three attack families have  each been invoked in the literature to justify when a clinical LLM is safe, namely 1) verbatim extraction, 2) prompt-based identity probing, and 3) membership inference.  We posit that these problems are not separable. The verdict on which fine-tuning regime supports the greatest amount of privacy depends on which attack one is concerned about.  In this paper, we provide the first benchmark that varies both objectives jointly.  Across six open-weight backbones and four clinical tasks, we fine-tune under four regimes (full-parameter and QLoRA, each with full- and masked-input loss) and evaluate every resulting cell with all three attack families and task-specific utility metrics. We additionally study differentially private fine-tuning on a focused slice of the grid as a case study of how a privacy-preserving training method behaves with respect to various privacy attacks.  Our investigation yields two primary findings: (i)Privacy metrics may disagree (e.g., verbatim extraction risk may not be correlated with prompt-based identity probing risk) and (ii) the fine-tuning regime interacts with these privacy metrics in a nontrivial manner. For example, one fine-tuning regime may reduce risk under one privacy metric while increasing risk under another.  This implies that reporting the results for single type of privacy attack, which is the current default for clinical LLMs, is unreliable for its stated purpose.
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ SETUP / VITALS ══════════════════════ -->
+<section id="setup" style="padding-top: 0;">
+  <div class="wrap">
+    <div class="vitals reveal">
+      <div class="vital">
+        <div class="num">6</div>
+        <div class="lab">open-weight backbones<br>LLaMA-3-8B-Instruct &middot; MedLLaMA-3-8B &middot; Meditron-7B &middot; Qwen3-0.6B/1.7B/4B</div>
+      </div>
+      <div class="vital">
+        <div class="num">4</div>
+        <div class="lab">clinical tasks<br>MedQA &middot; ICD-code prediction &middot; in-hospital mortality &middot; 15-day readmission</div>
+      </div>
+      <div class="vital">
+        <div class="num">4</div>
+        <div class="lab">fine-tuning regimes<br>Full FT / QLoRA &times; full-input loss / masked-input loss</div>
+      </div>
+      <div class="vital">
+        <div class="num">3</div>
+        <div class="lab">attack families<br>exact memorization &middot; prompt-based identity &middot; membership inference</div>
+      </div>
+      <div class="vital">
+        <div class="num">&epsilon;&isin;{1,2,10}</div>
+        <div class="lab">DP-SGD case study<br>across both fine-tuning paradigms and both loss formulations</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ ATTACK FAMILIES ══════════════════════ -->
+<section id="attacks">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Three ways to ask &ldquo;is it private?&rdquo;</span>
+      <h2>Each attack family interrogates the model differently</h2>
+    </div>
+    <div class="families reveal">
+      <div class="fam em">
+        <span class="tag">Exact Memorization (EM)</span>
+        <h3>Does it recite training text?</h3>
+        <p>Greedy continuation from a 50-token prefix, scored by n-gram overlap (Mem@10/20/30/50), ROUGE-L, BLEU, and BERTScore. This is the most internally consistent family; its four metrics agree at &rho; up to 0.96 across all tasks.</p>
+        <ul>
+          <li>Canonical metric: <strong>Mem@10</strong></li>
+          <li>Decoding: greedy (temp = 0)</li>
+          <li>Prefix length: L<sub>in</sub> = 50 tokens</li>
+        </ul>
+      </div>
+      <div class="fam pa">
+        <span class="tag">Prompt-Based Identity (PA)</span>
+        <h3>Does a name unlock the record?</h3>
+        <p>Clinical context is stripped away, leaving only a synthetic patient identifier. If the model still gets the diagnosis, outcome, or condition right, the identity alone is doing the leaking. PII is injected synthetically; no real patient data is used.</p>
+        <ul>
+          <li>Canonical metric: <strong>PA Accuracy</strong></li>
+          <li>Tasks: MedQA (name + question), mortality/readmission (Patient ID only), ICD (multi-choice classification)</li>
+        </ul>
+      </div>
+      <div class="fam mia">
+        <span class="tag">Membership Inference (MIA)</span>
+        <h3>Was this patient in the training set?</h3>
+        <p>A Random Forest over likelihood-based signals (loss, perplexity, mean token confidence, Min-k% Prob) tries to separate training members from held-out non-members, reported at low false-positive rate following the LiRA convention.</p>
+        <ul>
+          <li>Canonical metric: <strong>TPR@5% FPR</strong></li>
+          <li>Classifier: Random Forest (100 trees)</li>
+          <li>Features: NLL, perplexity, confidence, Min-20% Prob</li>
+        </ul>
+      </div>
+    </div>
+
+    <div style="margin-top: 38px;" class="reveal">
+      <div class="section-head">
+        <span class="eyebrow">Fine-tuning regimes</span>
+        <h2 style="font-size: 22px;">Four configurations form the audit grid</h2>
+      </div>
+      <div class="ft-grid">
+        <div class="ft-card">
+          <div class="ft-label">Full-parameter &middot; Full-input loss</div>
+          <p>All model weights updated; loss computed over both prompt and completion tokens. Highest adaptation capacity, highest privacy risk exposure.</p>
+        </div>
+        <div class="ft-card">
+          <div class="ft-label">Full-parameter &middot; Masked-input loss</div>
+          <p>All model weights updated; loss computed on completion tokens only. Isolates optimization to response generation behavior.</p>
+        </div>
+        <div class="ft-card">
+          <div class="ft-label">QLoRA &middot; Full-input loss</div>
+          <p>Parameter-efficient fine-tuning (rank r=16, 4-bit quantization); loss over full sequence. Fewer trainable parameters than full FT.</p>
+        </div>
+        <div class="ft-card">
+          <div class="ft-label">QLoRA &middot; Masked-input loss</div>
+          <p>Parameter-efficient + completion-only supervision. Empirically the strongest privacy-utility configuration under exact memorization and MIA.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ FINDINGS ══════════════════════ -->
+<section id="findings">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Findings</span>
+      <h2>What the joint audit actually shows</h2>
+    </div>
+
+    <div class="finding reveal">
+      <div class="fnum">F.01</div>
+      <div>
+        <h3>Privacy metrics disagree within families and across them</h3>
+        <p>Within the exact-memorization family, metrics move together (<span class="stat pos">&rho; &isin; [0.59, 0.96]</span> across all four tasks). Across families, the story flips: on MedQA, exact-memorization scores are <em>negatively</em> correlated with prompt-based identity scores (<span class="stat neg">&rho; &isin; [&minus;0.55, &minus;0.41]</span>, p &lt; 0.05), and membership inference is near-independent of either. A model that looks like the most private option under one attack can look like the leakiest under another.</p>
+        <p>Even within the prompt-based attack family, ROUGE-L shows a <span class="stat neg">&rho; = &minus;0.6</span> relationship with PA accuracy on the readmission task but a different sign on MedQA ; revealing that a single metric within an attack family can emphasize entirely different leakage modes.</p>
+      </div>
+    </div>
+
+    <div class="finding reveal">
+      <div class="fnum">F.02</div>
+      <div>
+        <h3>The &ldquo;safest&rdquo; fine-tuning regime depends on which attack you run</h3>
+        <p>On MedQA, QLoRA with masked-input loss achieves the best exact-memorization trade-off (<span class="stat">TOPSIS<sub>EM</sub> = 0.945</span>, 95% CI [0.90, 0.98]) and highest MIA score (<span class="stat">0.691</span>). But it ranks worst among fine-tuned configurations under prompt-based identity probing (<span class="stat">TOPSIS<sub>PA</sub> = 0.336</span>). Full FT with full-input loss shows the opposite pattern: poor EM performance (<span class="stat neg">0.275</span>) but highest PA score (<span class="stat pos">0.636</span>).</p>
+        <table class="topsis-table">
+          <thead>
+            <tr>
+              <th>Configuration</th>
+              <th class="em-col">EM TOPSIS</th>
+              <th class="pa-col">PA TOPSIS</th>
+              <th class="mia-col">MIA TOPSIS</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Base (no FT)</td><td class="em-col">0.304</td><td class="pa-col">0.306</td><td class="mia-col">&mdash;</td></tr>
+            <tr><td>Full FT | full loss</td><td class="em-col">0.275</td><td class="pa-col best">0.636</td><td class="mia-col">0.448</td></tr>
+            <tr><td>Full FT | masked loss</td><td class="em-col">0.731</td><td class="pa-col">0.552</td><td class="mia-col">0.606</td></tr>
+            <tr><td>QLoRA | full loss</td><td class="em-col">0.274</td><td class="pa-col">0.516</td><td class="mia-col">0.568</td></tr>
+            <tr><td><strong>QLoRA | masked loss</strong></td><td class="em-col best">0.945</td><td class="pa-col">0.336</td><td class="mia-col best">0.691</td></tr>
+          </tbody>
+        </table>
+        <p style="margin-top: 12px;">An &alpha;-weighted sensitivity sweep varying from privacy-only (&alpha;=0) to utility-only (&alpha;=1) confirms: no regime consistently dominates across all three protocols at any weighting.</p>
+      </div>
+    </div>
+
+    <div class="finding reveal">
+      <div class="fnum">F.03</div>
+      <div>
+        <h3>Masked-input loss is a robust default, but not universally optimal</h3>
+        <p>Across all four tasks, masked-input loss formulation <em>always wins</em> for utility gain. The only explicitly quantified value in the main text is MedQA: QLoRA with masked loss achieves a mean <span class="stat">&Delta;Acc = 0.096</span> (95% CI [0.066, 0.131]) over each model&rsquo;s base checkpoint, followed by full-parameter masked loss (<span class="stat">&Delta;Acc = 0.058</span>). For in-hospital mortality prediction, 15-day readmission, and ICD code prediction, masked loss also wins across both fine-tuning paradigms (Figure 12, Appendix C.1), though the relative advantage of QLoRA vs. full-parameter fine-tuning is less uniform than on MedQA.</p>
+        <p>For privacy, masked loss consistently reduces exact memorization risk but its advantage under PA and MIA is task-dependent. The privacy-utility trade-off is therefore not a property of the fine-tuning regime alone, but of the specific <em>(regime, attack, task)</em> triple.</p>
+      </div>
+    </div>
+
+    <div class="finding reveal">
+      <div class="fnum">F.04</div>
+      <div>
+        <h3>Differential privacy helps broadly, but unevenly across attack families</h3>
+        <p>DP-SGD fine-tuning reduces vulnerability under all three attack families relative to non-DP baselines, with effects most pronounced at <span class="stat">&epsilon; = 1</span>. On MedQA: Mem@10 for Full FT drops from <span class="stat neg">0.16</span> (non-DP) to <span class="stat pos">0.08&ndash;0.12</span> under DP; MIA AUC falls from <span class="stat neg">0.55&ndash;0.58</span> to <span class="stat pos">0.40&ndash;0.45</span>. PA F1 scores are also lower under DP relative to non-DP baselines (non-DP: F1 0.38&ndash;0.50), though they remain relatively stable <em>across</em> epsilon values.</p>
+        <p>LoRA with masked loss is the strongest configuration under DP: it achieves near-zero PA accuracy on the mortality task and the lowest Mem@10 across all tasks. Full FT utility accuracy on MedQA is consistent across all &epsilon; values (<span class="stat">&sim;0.65</span>). On the mortality task specifically, LoRA accuracy is lower at <span class="stat">&sim;0.41&ndash;0.52</span> but Full FT utility is largely unaffected (&sim;0.83).</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ FIGURES ══════════════════════ -->
+<section id="figures">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Selected figures</span>
+      <h2>The grid, visualized</h2>
+    </div>
+
+    <!-- Figure 1 -->
+    <figure style="margin-bottom: 40px;" class="reveal">
+      <!-- EDIT: replace with actual figure — paper Figure 1 -->
+      <img class="fig-img" data-src="figures/fig1_medqa_utility.png" alt="MedQA utility gain bar chart and per-model heatmap" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+      <div class="fig-placeholder" style="display:none">
+        <span class="ph-title">Figure 1 placeholder</span>
+        <span>Upload: figures/fig1_medqa_utility.png</span>
+        <span style="font-size:11px; text-align:center; max-width:320px">MedQA utility gain relative to each model's base checkpoint (Accuracy). QLoRA + masked loss achieves mean &Delta;Acc = +0.096.</span>
+      </div>
+      <figcaption><span class="fig-num">Figure 1</span>: <b>Fine-tune utility gain on MedQA.</b> For each model and configuration, we compute &Delta;Accuracy = Accuracy<sub>FT</sub> &minus; Accuracy<sub>Base</sub>. Bars show mean across 6 base models with 95% bootstrap CI (B=2000). Heatmap reports per-model paired improvements. QLoRA with masked loss (L-masked) achieves the largest average improvement (&Delta;Acc = +0.096).</figcaption>
+    </figure>
+
+    <!-- Figure 2 — the main correlation figure -->
+    <figure style="margin-bottom: 40px;" class="reveal">
+      <!-- EDIT: replace with actual figure — paper Figure 2 / Figure 13 -->
+      <img class="fig-img" data-src="figures/fig2_correlation_matrix.png" alt="Spearman correlation matrix across privacy protocols on MedQA and ICD code prediction" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+      <div class="fig-placeholder" style="display:none">
+        <span class="ph-title">Figure 2 placeholder</span>
+        <span>Upload: figures/fig2_correlation_matrix.png</span>
+        <span style="font-size:11px; text-align:center; max-width:380px">Cross-attack correlation matrix for MedQA and ICD code prediction. Within-EM rho in [+0.82, +0.96]; EM vs PA rho in [-0.55, -0.22].</span>
+      </div>
+      <figcaption><span class="fig-num">Figure 2</span>: <b>Cross-attack correlation matrices.</b> Spearman rank correlations among nine metric scores from exact memorization (EM), prompt-based identity (PA), and membership inference (MIA) on MedQA (left) and ICD code prediction (right). EM metrics form a stable positive block; EM and PA metrics are negatively correlated on MedQA (&rho; &isin; [&minus;0.55, &minus;0.22]); MIA is near-independent of both. Significance: *p&lt;0.05, **p&lt;0.01, ***p&lt;0.001.</figcaption>
+    </figure>
+
+    <!-- Figures 3 and 4 side by side -->
+    <div class="figures-grid reveal">
+      <figure>
+        <!-- EDIT: replace with actual figure — paper Figure 3 -->
+        <img class="fig-img" data-src="figures/fig3_pareto_medqa.png" alt="Per-protocol utility-privacy Pareto landscape on MedQA" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+        <div class="fig-placeholder" style="display:none">
+          <span class="ph-title">Figure 3 placeholder</span>
+          <span>Upload: figures/fig3_pareto_medqa.png</span>
+        </div>
+        <figcaption><span class="fig-num">Figure 3</span>: <b>Utility&ndash;privacy Pareto landscape (MedQA).</b> Each point is one fine-tuning configuration (mean across N=6 models). The gold star marks the unattainable ideal; dashed lines show the Pareto frontier per protocol. Bottom panels show TOPSIS<sub>P</sub> with 95% cluster-bootstrap CI (B=2000).</figcaption>
+      </figure>
+      <figure>
+        <!-- EDIT: replace with actual figure — paper Figure 4 -->
+        <img class="fig-img" data-src="figures/fig4_alpha_sensitivity.png" alt="Sensitivity of ranking to utility weight alpha across 4 tasks" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+        <div class="fig-placeholder" style="display:none">
+          <span class="ph-title">Figure 4 placeholder</span>
+          <span>Upload: figures/fig4_alpha_sensitivity.png</span>
+        </div>
+        <figcaption><span class="fig-num">Figure 4</span>: <b>Ranking sensitivity to utility weight &alpha;.</b> For each protocol&times;task cell, configurations are ranked by a convex combination of utility (weight &alpha;) and privacy (weight 1&minus;&alpha;). Rankings keep reshuffling as &alpha; varies, no regime is universally optimal.</figcaption>
+      </figure>
+    </div>
+
+    <!-- Figure DP -->
+    <figure style="margin-top: 40px;" class="reveal">
+      <!-- EDIT: replace with actual figure — paper Figure 18 -->
+      <img class="fig-img" data-src="figures/fig18_dp_medqa.png" alt="Impact of Differential Privacy on MedQA: utility vs Mem@10, MIA AUC, PA F1 across epsilon" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex'">
+      <div class="fig-placeholder" style="display:none">
+        <span class="ph-title">Figure 18 placeholder</span>
+        <span>Upload: figures/fig18_dp_medqa.png</span>
+        <span style="font-size:11px; text-align:center; max-width:380px">Impact of DP on MedQA: 2x2 panel showing utility accuracy vs EM, MIA, PA across epsilon = 1, 2, 10.</span>
+      </div>
+      <figcaption><span class="fig-num">Figure 5</span>: <b>Impact of Differential Privacy on MedQA.</b> 2&times;2 panel contrasting clinical utility (Accuracy) against exact memorization (Mem@10), membership inference (MIA AUC), and prompt-based identity attack (PA F1) across DP budgets &epsilon; &isin; {1, 2, 10}. DP reduces all three vulnerabilities, most visibly at &epsilon;=1. LoRA with masked loss achieves the best privacy under DP across all three attacks.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ══════════════════════ IMPLICATIONS ══════════════════════ -->
+<section id="implications">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Implications</span>
+      <h2>What this means for clinical LLM evaluation practice</h2>
+    </div>
+
+    <div class="quote-block reveal">
+      <strong>Don't call it private until you pick a metric; and report all three.</strong>
+      A model should not be certified as &ldquo;private&rdquo; without specifying the attack family and evaluation metrics under which the claim was evaluated. Single-protocol reports, which are the current default for clinical LLMs, are unreliable for their stated purpose.
+    </div>
+
+    <div class="families reveal" style="margin-top: 24px;">
+      <div class="fam em">
+        <span class="tag">For regulators</span>
+        <h3>HIPAA, GDPR, AI Act</h3>
+        <p>HIPAA's Privacy Rule cares primarily about individual re-identification. A model with high MIA or verbatim-extraction risk may not constitute a legal violation under HIPAA if it does not enable unique identification , yet both attacks may predict real harm in deployment. Reporting all three families raises the evidentiary bar.</p>
+      </div>
+      <div class="fam pa">
+        <span class="tag">For model developers</span>
+        <h3>No free lunch in fine-tuning</h3>
+        <p>There is no universally privacy-safe fine-tuning recipe. A masked-loss QLoRA fine-tune is strong against exact memorization and MIA but vulnerable under identity probing. Report the base model baseline, fine-tuning strategy, task utility, and multi-family privacy measurements together.</p>
+      </div>
+      <div class="fam mia">
+        <span class="tag">For auditors</span>
+        <h3>Use our benchmark</h3>
+        <p>We release all code as a public benchmark for clinical-LLM fine-tuning privacy-utility evaluation. The benchmark covers the full grid: six backbones &times; four tasks &times; four regimes &times; three attack families, including DP-SGD baselines at &epsilon; &isin; {1, 2, 10}.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════════════════ BIBTEX ══════════════════════ -->
+<section id="bibtex" style="padding-bottom: 32px;">
+  <div class="wrap">
+    <div class="section-head reveal">
+      <span class="eyebrow">Citation</span>
+      <h2>BibTeX</h2>
+    </div>
+    <!-- EDIT: bibtex — fill in once arXiv ID / proceedings entry is known -->
+    <div class="bibtex reveal">
+      <button class="copy-btn" id="copyBtn" onclick="copyBibtex()">Copy</button>
+      <pre id="bibtexBlock">@inproceedings{anon2026privacy,
+  title     = {Don't Call It Privacy Until You Pick a Metric:
+               Joint Auditing of Fine-Tuning and Privacy Metrics
+               in Clinical LLMs},
+  author    = {Anonymous Author(s)},
+  booktitle = {Advances in Neural Information Processing Systems},
+  volume    = {39},
+  year      = {2026},
+  note      = {NeurIPS 2026}
+  <!-- EDIT: add url = {https://arxiv.org/abs/XXXX.XXXXX} when available -->
+}</pre>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ══════════════════════ FOOTER ══════════════════════ -->
+<footer>
+  <div class="wrap">
+    <div class="fine">
+      This page accompanies a NeurIPS 2026 submission. The arXiv preprint link and author names will be added after the review period. All figures and experimental results &copy; the authors.
+    </div>
+    <div class="links">
+      <!-- EDIT: paper-link -->
+      <!-- <a href="paper.pdf" target="_blank">Paper</a> -->
+      <!-- EDIT: arxiv-link -->
+      <a href="#">arXiv(coming soon)</a>
+      <!-- EDIT: code-link -->
+      <a href="https://anonymous.4open.science/r/llm-privacy-audit-2029/" target="_blank">Code</a>
+      <a href="#bibtex">Cite</a>
+    </div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  /* ── Scroll reveal ── */
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('in');
+        observer.unobserve(e.target);
+      }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  /* ── Lazy image loading ── */
+  const imgObserver = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        const img = e.target;
+        const src = img.dataset.src;
+        if (src) {
+          img.src = src;
+          img.onload = () => img.classList.add('in');
+          img.onerror = () => {}; // handled by inline onerror
+        }
+        imgObserver.unobserve(img);
+      }
+    });
+  }, { rootMargin: '200px' });
+
+  document.querySelectorAll('img[data-src]').forEach(img => imgObserver.observe(img));
+})();
+
+/* ── BibTeX copy button ── */
+function copyBibtex() {
+  const text = document.getElementById('bibtexBlock').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1800);
+  });
+}
+</script>
+</body>
+</html>
